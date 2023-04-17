@@ -22,10 +22,10 @@ def generate_data(key, n_samples, n_var, sigma):
     :param key:
     :param n_samples:
     :param n_var:
-    :param sigma: standard deviation of covariates. recommend < 1 for computational reasons
+    :param sigma: standard deviation of covariates.
     :return:
         x : (n_samples, n_var) array of covariates
-        y: (n_samples)-length array of binary outcome variables
+        y: (n_samples)-length 1-D array of binary outcome variables
     """
     i = jnp.ones((n_samples, 1))
     x = sigma*rand.normal(key=key, shape=(n_samples, n_var))
@@ -133,7 +133,7 @@ def compute_bootstrap_betas(X, y, max_iter, R):
 def compute_covariance_matrix(key, final_betas, X, y, robust=False):
     """
     there are currently errors with my implementation of the ROBUST covariance matrix
-    calculation -- mainly due to numerical issues when bootstrapping.
+    calculation -- mainly due to numerical issues when re-estimating bootstrapped models.
     :param key:
     :param final_betas:
     :param X:
@@ -165,6 +165,7 @@ def compute_standard_errors(varcov):
     var = jnp.diagonal(varcov)
     return np.sqrt(var)
 
+
 def estimate(key, X, y, b, max_iter):
     n = max_iter
     g = jnp.inf
@@ -194,17 +195,29 @@ def main(key, max_iter):
     final_betas, ll, g, init_ll, i = estimate(key, X, y, init_betas, max_iter)
 
     # covariance matrix
-    print("\n\ncomputing covariance matrix...")
-    cov = compute_covariance_matrix(key, final_betas, X, y, robust=False)
+    robust = False
+    cov = compute_covariance_matrix(key, final_betas, X, y, robust=robust)
+    se = compute_standard_errors(cov)
+    t = final_betas / se
 
     # estimation statistics
-    print("\n")
     print(100*"-")
     print(f"initial LL: {init_ll}\nfinal LL: {ll}")
-    print(f"\nestimated coefficients: {final_betas}")
-    print(f"true coefficients: {true_betas}\n")
-    print(f"estimated covariance matrix:\n{cov}")
+    # print(f"mcfaddens R^2: {1 - jnp.exp(ll) / jnp.exp(init_ll)}")
+    print("Newton-Raphson with norm(g) < 0.0001 convergence criterion")
+    print(f"number of iterations: {i}")
+    print(f"final gradient: {g}\n")
+    print("coefficient estimates: \n")
 
+    results_df = pd.DataFrame({"Variable": np.arange(n_vars + 1),
+                               "B_hat": final_betas,
+                               "SE": se,
+                               "t": t}).set_index("Variable", drop=True)
+
+    print(results_df)
+    print(100*"-", "\n")
+    print(f"estimated covariance matrix:\n{cov}")
+    print(100*"-")
     # biogeme_test(key)
 
 
