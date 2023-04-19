@@ -16,6 +16,12 @@ config.update("jax_debug_nans", True)
 k = rand.PRNGKey(0)
 
 
+"""
+TODO: Convert to a class: BinaryLogit
+      Maybe write a separate data generator class? 
+"""
+
+
 def generate_data(key, n_samples, n_var, sigma):
     """
 
@@ -65,7 +71,6 @@ def compute_log_likelihood(beta, x, y):
     # TODO: better underflow handling of the log(1-p) calculation
     t2 = (1 - y) * (1 - prediction)
     LL = jnp.sum(jnp.log(t1 + t2))
-    # print(LL)
     return LL
 
 
@@ -173,6 +178,7 @@ def estimate(key, X, y, b, max_iter):
     betas = b
     ll = -jnp.inf
     init_ll = -jnp.inf
+    ll_null = compute_log_likelihood(beta=jnp.zeros(X.shape[1]), x=X, y=y)
     while g >= 0.0001:
         if i > max_iter:
             break
@@ -182,7 +188,7 @@ def estimate(key, X, y, b, max_iter):
         # print(f"({i}/{n}){':': <10}log-likelihood = {ll}")
         i += 1
 
-    return betas, ll, g, init_ll, i
+    return betas, ll, g, init_ll, ll_null, i
 
 
 def main(key, max_iter):
@@ -192,7 +198,7 @@ def main(key, max_iter):
     init_betas = rand.uniform(key=key, shape=(n_vars+1,), minval=-5, maxval=5)  # initialize random beta values
 
     # estimate the model
-    final_betas, ll, g, init_ll, i = estimate(key, X, y, init_betas, max_iter)
+    final_betas, ll, g, init_ll, ll_null, i = estimate(key, X, y, init_betas, max_iter)
 
     # covariance matrix
     robust = False
@@ -202,8 +208,10 @@ def main(key, max_iter):
 
     # estimation statistics
     print(100*"-")
+    print(f"LL(0): {ll_null}")
     print(f"initial LL: {init_ll}\nfinal LL: {ll}")
-    # print(f"mcfaddens R^2: {1 - jnp.exp(ll) / jnp.exp(init_ll)}")
+    print(f"LL ratio test will null model: {-2*(ll_null - ll)}")
+    print(f"mcfaddens R^2: {1 - ll / ll_null}")
     print("Newton-Raphson with norm(g) < 0.0001 convergence criterion")
     print(f"number of iterations: {i}")
     print(f"final gradient: {g}\n")
