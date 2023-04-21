@@ -82,23 +82,59 @@ def compute_individual_log_likelihood(beta, x, y):
     return LL
 
 
-def update_params(beta, x, y):
+def update_params(beta, x, y, method="NR"):
     """
     Newton-Raphson algorithm to update the coefficients
 
-    :param beta: current coefficient estimates
-    :param x: covariates
-    :param y: choice variable
+    :param beta: array-like
+                 current coefficient estimates
+    :param x: ndarray
+                 covariates
+    :param y: array-like
+                 choice variable
+    :param method: String
+                optimization algorithm. currently supported arguments:
+                    - "NR" : unconstrained newton-raphson
+                    - "bfgs" : broyden-fletcher-goldfarb-shanno algorithm
     :return: updated beta values
     """
     LL = compute_log_likelihood(beta, x, y)
-    gradient = jax.grad(compute_log_likelihood)(1.*beta, 1.*x, 1.*y)
-    hessian = jax.hessian(compute_log_likelihood)(beta, x, y)
+
+    if method == "NR":
+        new_betas, g = newton_raphson(x, y, beta)
+        return new_betas, LL, g
+
+    if method == "bfgs":
+        print("BFGS is a work in progress. Optimizing with NR...")
+        new_betas, g = newton_raphson(x, y, beta)
+        return new_betas, LL, g
+
+    else:
+        raise ValueError("Supported method arguments are 'BR' and 'BFGS'")
+
+
+def newton_raphson(X, y, beta):
+
+    # Newton - Raphson algorithm to update the coefficients
+    gradient = jax.grad(compute_log_likelihood)(1. * beta, 1. * X, 1. * y)
+    hessian = jax.hessian(compute_log_likelihood)(beta, X, y)
 
     invH = jnp.linalg.inv(hessian)
     g = jnp.linalg.norm(gradient)
 
-    return beta - invH.dot(gradient), LL, g
+    return beta - invH.dot(gradient), g
+
+
+def bfgs(X, y, beta, B):
+    """
+    BFGS algorithm
+    :param X:
+    :param y:
+    :param beta:
+    :param B:
+    :return:
+    """
+    raise NotImplementedError
 
 
 def sample_from_data(key, X, y):
@@ -129,7 +165,7 @@ def compute_bootstrap_betas(X, y, max_iter, R):
         Xb, yb = sample_from_data(key, X, y)
         print(Xb)
         init_betas = rand.uniform(key=key, shape=(X.shape[1],), minval=-5, maxval=5)  # initialize random beta values
-        final_betas, ll, g, init_ll, i = estimate(key, X, y, init_betas, max_iter)
+        final_betas, ll, g, init_ll, ll_null, i = estimate(key, X, y, init_betas, max_iter)
         beta_r = beta_r.at[r].set(final_betas)
 
     return beta_r
@@ -182,7 +218,7 @@ def estimate(key, X, y, b, max_iter):
     while g >= 0.0001:
         if i > max_iter:
             break
-        betas, ll, g = update_params(betas, X, 1 * y)
+        betas, ll, g = update_params(betas, X, 1 * y, method="NR")
         if i == 0:
             init_ll = ll
         # print(f"({i}/{n}){':': <10}log-likelihood = {ll}")
@@ -229,12 +265,9 @@ def main(key, max_iter):
     # biogeme_test(key)
 
 
+"""
 def biogeme_test(key):
-    """
-    WIP
-    :param key:
-    :return:
-    """
+    
     x, y, true_betas = generate_data(key, 1000, 6, 3)
     data = pd.DataFrame({"x": x, "choice": 1*y})
     database = db.Database("dummy_db", data)
@@ -253,7 +286,7 @@ def biogeme_test(key):
     results = biogeme.estimate()
     pandas_results = results.getEstimatedParameters()
     print(pandas_results)
-
+"""
 
 if __name__ == "__main__":
     main(k, 1000)
