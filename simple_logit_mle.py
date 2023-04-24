@@ -42,6 +42,7 @@ def generate_data(key, n_samples, n_var, sigma):
     y = rand.bernoulli(key, prob)
     return x, y, true_b
 
+# comment to test git commits!
 
 def compute_choice_probability(beta, x):
     """
