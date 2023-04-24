@@ -110,7 +110,7 @@ def update_params(beta, x, y, method="NR"):
         return new_betas, LL, g
 
     else:
-        raise ValueError("Supported method arguments are 'BR' and 'BFGS'")
+        raise ValueError("Supported method arguments are 'NR' and 'bfgs'")
 
 
 def newton_raphson(X, y, beta):
@@ -134,6 +134,8 @@ def bfgs(X, y, beta, B):
     :param B:
     :return:
     """
+    gradient = jax.grad(compute_log_likelihood)(1. * beta, 1. * X, 1. * y)
+
     raise NotImplementedError
 
 
@@ -171,7 +173,7 @@ def compute_bootstrap_betas(X, y, max_iter, R):
     return beta_r
 
 
-def compute_covariance_matrix(key, final_betas, X, y, robust=False):
+def compute_covariance_matrix(key, final_betas, X, y, bootstrap=False):
     """
     there are currently errors with my implementation of the ROBUST covariance matrix
     calculation -- mainly due to numerical issues when re-estimating bootstrapped models.
@@ -180,10 +182,11 @@ def compute_covariance_matrix(key, final_betas, X, y, robust=False):
     :param X:
     :param y:
     :param robust:
+    :param bootstrap: Boolean
     :return:
     """
-    if robust:
-        # bootstrap
+
+    if bootstrap:
         R = 100
         max_iter = 1000
         bootstrap_betas = compute_bootstrap_betas(X, y, max_iter, R)
@@ -195,11 +198,20 @@ def compute_covariance_matrix(key, final_betas, X, y, robust=False):
         return covs/R
 
     else:
-        # asymptotic estimate
+        # sandwich estimator
         N = X.shape[0]
         scores = jax.jacfwd(compute_individual_log_likelihood)(1. * final_betas, 1. * X, 1. * y)
         W = jnp.cov(scores, rowvar=False)
-        return jnp.linalg.inv(W) / N
+        H = jax.hessian(compute_log_likelihood)(final_betas, X, y)
+        invH = jnp.linalg.inv(H)
+        half = jnp.matmul(invH, W)
+        rob_cov = jnp.matmul(half, invH)
+
+        # standard estimate
+        N = X.shape[0]
+        scores = jax.jacfwd(compute_individual_log_likelihood)(1. * final_betas, 1. * X, 1. * y)
+        W = jnp.cov(scores, rowvar=False)
+        return jnp.linalg.inv(W) / N, rob_cov
 
 
 def compute_standard_errors(varcov):
@@ -236,11 +248,13 @@ def main(key, max_iter):
     # estimate the model
     final_betas, ll, g, init_ll, ll_null, i = estimate(key, X, y, init_betas, max_iter)
 
-    # covariance matrix
-    robust = False
-    cov = compute_covariance_matrix(key, final_betas, X, y, robust=robust)
+    # covariance matrix & hypothesis testing
+    robust = True
+    cov, rob_cov = compute_covariance_matrix(key, final_betas, X, y, bootstrap=False)
     se = compute_standard_errors(cov)
+    rob_se = compute_standard_errors(rob_cov)
     t = final_betas / se
+    rob_t = final_betas / rob_se
 
     # estimation statistics
     print(100*"-")
@@ -255,12 +269,15 @@ def main(key, max_iter):
 
     results_df = pd.DataFrame({"Variable": np.arange(n_vars + 1),
                                "B_hat": final_betas,
+                               "B_star": true_betas,
                                "SE": se,
-                               "t": t}).set_index("Variable", drop=True)
+                               "Rob. SE": rob_se,
+                               "t": t,
+                               "Rob. t": rob_t}).set_index("Variable", drop=True)
 
     print(results_df)
     print(100*"-", "\n")
-    print(f"estimated covariance matrix:\n{cov}")
+    print(f"Robust covariance matrix:\n{rob_cov}")
     print(100*"-")
     # biogeme_test(key)
 
