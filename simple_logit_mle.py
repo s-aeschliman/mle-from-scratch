@@ -42,7 +42,6 @@ def generate_data(key, n_samples, n_var, sigma):
     y = rand.bernoulli(key, prob)
     return x, y, true_b
 
-# comment to test git commits!
 
 def compute_choice_probability(beta, x):
     """
@@ -176,8 +175,8 @@ def compute_bootstrap_betas(X, y, max_iter, R):
 
 def compute_covariance_matrix(key, final_betas, X, y, bootstrap=False):
     """
-    there are currently errors with my implementation of the ROBUST covariance matrix
-    calculation -- mainly due to numerical issues when re-estimating bootstrapped models.
+    there are currently errors with my boostrap implementation of the ROBUST covariance matrix
+     -- mainly due to numerical issues when re-estimating bootstrapped models.
     :param key:
     :param final_betas:
     :param X:
